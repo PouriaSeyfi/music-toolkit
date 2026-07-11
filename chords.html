@@ -90,6 +90,7 @@
   </div>
 </div>
 
+<script src="js/piano.js"></script>
 <script>
 (function(){
   "use strict";
@@ -202,24 +203,9 @@
   }
   buildKeyboard();
 
-  /* ---------------- audio ---------------- */
-  let ctx = null;
-  function audio(){
-    if(!ctx) ctx = new (window.AudioContext||window.webkitAudioContext)();
-    if(ctx.state==="suspended") ctx.resume();
-    return ctx;
-  }
-  function tone(semisFromC4, t0, dur, vol){
-    const c = audio();
-    const f = 261.63 * Math.pow(2, semisFromC4/12);
-    const o = c.createOscillator(), g = c.createGain();
-    o.type = "triangle"; o.frequency.value = f;
-    g.gain.setValueAtTime(0, t0);
-    g.gain.linearRampToValueAtTime(vol, t0+0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
-    o.connect(g).connect(c.destination);
-    o.start(t0); o.stop(t0+dur+0.05);
-  }
+  /* ---------------- audio (sampled piano, see js/piano.js) ---------------- */
+  const audio = Piano.context;
+  const tone = Piano.play;
   function chordSemis(){
     const root = parseRoot(rootName);
     return quality.f.map(([,s]) => root.pc + s);

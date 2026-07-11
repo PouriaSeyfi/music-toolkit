@@ -135,6 +135,7 @@
   </div>
 </div>
 
+<script src="js/piano.js"></script>
 <script>
 (function(){
   "use strict";
@@ -244,43 +245,27 @@
   const cBig = el("text",{x:0,y:6,"text-anchor":"middle","font-size":34,class:"big"},center);
   const cSmall = el("text",{x:0,y:28,"text-anchor":"middle",class:"small"},center);
 
-  /* ---------------- audio ---------------- */
-  let ctx=null;
-  function audio(){
-    if(!ctx) ctx = new (window.AudioContext||window.webkitAudioContext)();
-    if(ctx.state==="suspended") ctx.resume();
-    return ctx;
-  }
-  function freq(pc, oct){ return 261.63 * Math.pow(2, (pc + oct*12)/12); }
-  function tone(f, t0, dur, vol){
-    const c = audio();
-    const o = c.createOscillator(), g = c.createGain();
-    o.type = "triangle"; o.frequency.value = f;
-    g.gain.setValueAtTime(0, t0);
-    g.gain.linearRampToValueAtTime(vol, t0+0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
-    o.connect(g).connect(c.destination);
-    o.start(t0); o.stop(t0+dur+0.05);
-  }
+  /* ---------------- audio (sampled piano, see js/piano.js) ---------------- */
+  const audio = Piano.context;
   function playChord(rootName, quality){
-    const c = audio(); const t0 = c.currentTime+0.03;
+    const t0 = audio().currentTime+0.03;
     const root = PC[rootName];
     const third = quality==="major" ? 4 : 3;
     const fifth = quality==="dim" ? 6 : 7;
     [root, root+third, root+fifth].forEach((st,i)=>{
-      tone(freq(st,0), t0, 1.1, 0.16);
-      if(i===0) tone(freq(st,-1), t0, 1.1, 0.10);
+      Piano.play(st, t0, 1.1, 0.16);
+      if(i===0) Piano.play(st-12, t0, 1.1, 0.10);
     });
   }
   function playScale(scale){
-    const c = audio(); const t0 = c.currentTime+0.03;
+    const t0 = audio().currentTime+0.03;
     const notes = scale.concat([scale[0]]);
     let prev = -1, oct = 0;
     notes.forEach((n,i)=>{
       let pc = PC[n];
       if (pc <= prev) oct++;
       prev = pc;
-      tone(freq(pc,oct), t0 + i*0.22, 0.34, 0.18);
+      Piano.play(pc + oct*12, t0 + i*0.22, 0.34, 0.18);
     });
   }
 
