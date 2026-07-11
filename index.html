@@ -31,7 +31,6 @@
   }
   .tool p{margin:0;color:var(--muted);font-size:14.5px;flex:1}
   .tool .go{color:var(--brass);font-size:13.5px;font-weight:600}
-  footer{margin-top:clamp(28px,5vw,56px);color:var(--muted);font-size:13px;text-align:center}
 </style>
 </head>
 <body>
@@ -62,6 +61,17 @@
       <h2>Chord Explorer</h2>
       <p>Pick a root and a quality — from plain triads to ninths — and see the chord
          spelled out on a piano keyboard, with intervals, and play it.</p>
+      <span class="go">Open tool →</span>
+    </a>
+
+    <a class="tool" href="scales.html">
+      <span class="icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M4 20L8 12l3 4 3-8 3 6 3-4"/>
+        <path d="M3 20h18"/></svg>
+      </span>
+      <h2>Scale Explorer</h2>
+      <p>Browse scales and modes — major, the three minors, all seven modes, pentatonic,
+         blues and more — spelled out, on the keyboard, played up or down.</p>
       <span class="go">Open tool →</span>
     </a>
 
@@ -99,9 +109,11 @@
     </a>
   </div>
 
-  <footer>Built with plain HTML, SVG, and the Web Audio API. Piano sound:
-    <a href="https://archive.org/details/SalamanderGrandPianoV3" style="color:inherit">Salamander
-    Grand Piano</a> by Alexander Holm (CC&nbsp;BY&nbsp;3.0).</footer>
+  <footer class="site">
+    <p class="brand">© 2026 Music toolkit. All rights reserved.</p>
+    <p class="credit">Piano samples: <a href="https://archive.org/details/SalamanderGrandPianoV3">Salamander
+       Grand Piano</a> by Alexander Holm (CC&nbsp;BY&nbsp;3.0).</p>
+  </footer>
 </div>
 </body>
 </html>

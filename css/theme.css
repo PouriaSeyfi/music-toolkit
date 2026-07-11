@@ -95,3 +95,12 @@ h2.sect{
 .chipbtn:hover{border-color:var(--brass)}
 .chipbtn:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
 .chipbtn.on{border-color:var(--brass);color:var(--brass);background:var(--brass-soft)}
+
+/* site footer shared by every page */
+footer.site{
+  margin-top:clamp(28px,5vw,56px);color:var(--muted);font-size:13px;text-align:center;
+}
+footer.site p{margin:4px 0}
+footer.site .brand{font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif}
+footer.site .credit{font-size:12px;opacity:.85}
+footer.site a{color:inherit}
