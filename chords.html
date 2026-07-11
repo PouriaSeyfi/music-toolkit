@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chord Explorer · Music toolkit</title>
+<link rel="stylesheet" href="css/theme.css">
+<style>
+  .layout{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.3fr);gap:clamp(20px,3.5vw,40px);align-items:start}
+  @media (max-width:860px){.layout{grid-template-columns:1fr}}
+  .col{display:flex;flex-direction:column;gap:16px;min-width:0}
+
+  .roots{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+  .quals{display:flex;flex-wrap:wrap;gap:8px}
+  .quals .chipbtn{font-size:15px}
+
+  .chord-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  .chord-head .name{
+    font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    font-size:40px;font-weight:600;line-height:1.1;
+  }
+  .chord-head .full{color:var(--muted);font-size:15px}
+
+  .note-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .note-chip{
+    background:var(--chip);border:1px solid var(--chip-edge);border-radius:10px;
+    min-width:64px;padding:8px 8px 7px;text-align:center;
+  }
+  .note-chip.root{border-color:var(--brass);background:var(--brass-soft)}
+  .note-chip .n{font-family:"Iowan Old Style",Palatino,Georgia,serif;font-size:20px;line-height:1.15}
+  .note-chip .iv{font-size:10.5px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+
+  .kbd-box{margin-top:4px}
+  svg.kbd{display:block;width:100%;height:auto}
+  .wk{fill:var(--card);stroke:var(--card-edge)}
+  .bk{fill:var(--disc);stroke:var(--disc-line)}
+  .wk.hl{fill:var(--brass-soft);stroke:var(--brass)}
+  .bk.hl{fill:var(--brass);stroke:var(--brass)}
+  .wk.rt{fill:var(--brass);stroke:var(--brass)}
+  .bk.rt{fill:var(--brass);stroke:var(--engrave)}
+
+  .play-row{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <a class="home serif" href="index.html">♩ Music toolkit</a>
+  <span class="sep">/</span>
+  <span class="here">Chord Explorer</span>
+</nav>
+<div class="wrap">
+  <header class="page">
+    <h1>Chord Explorer</h1>
+    <p>Choose a root note and a chord quality. The chord is spelled with correct
+       accidentals, laid out on the keyboard, and ready to hear.</p>
+  </header>
+
+  <div class="layout">
+    <div class="col">
+      <div class="card">
+        <h2 class="sect">Root</h2>
+        <div class="roots" id="roots"></div>
+      </div>
+      <div class="card">
+        <h2 class="sect">Quality</h2>
+        <div class="quals" id="quals"></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card">
+        <div class="chord-head">
+          <span class="name serif" id="chordName"></span>
+          <span class="full" id="chordFull"></span>
+        </div>
+        <div class="note-row" id="noteRow"></div>
+        <div class="play-row">
+          <button class="btn brass" id="playBlock" type="button">▶ Play chord</button>
+          <button class="btn" id="playArp" type="button">▶ Arpeggio</button>
+        </div>
+      </div>
+      <div class="card kbd-box">
+        <h2 class="sect">On the keyboard</h2>
+        <svg class="kbd" id="kbd" viewBox="0 0 630 150" role="img"
+             aria-label="Piano keyboard with chord tones highlighted"></svg>
+        <p class="hint" style="margin-top:12px">Solid brass key = <b>root</b> ·
+           outlined keys = the other chord tones.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  /* ---------------- theory ---------------- */
+  const LETTERS = ["C","D","E","F","G","A","B"];
+  const NAT_PC  = [0,2,4,5,7,9,11];
+  const ACC_STR = {"-2":"𝄫","-1":"♭","0":"","1":"♯","2":"𝄪"};
+
+  const ROOTS = ["C","C♯","D♭","D","E♭","E","F","F♯","G♭","G","A♭","A","B♭","B"];
+
+  const QUALITIES = [
+    {sym:"",        full:"major",            f:[[1,0],[3,4],[5,7]]},
+    {sym:"m",       full:"minor",            f:[[1,0],[3,3],[5,7]]},
+    {sym:"°",       full:"diminished",       f:[[1,0],[3,3],[5,6]]},
+    {sym:"+",       full:"augmented",        f:[[1,0],[3,4],[5,8]]},
+    {sym:"sus2",    full:"suspended 2nd",    f:[[2,2],[1,0],[5,7]].sort((a,b)=>a[1]-b[1])},
+    {sym:"sus4",    full:"suspended 4th",    f:[[1,0],[4,5],[5,7]]},
+    {sym:"6",       full:"major 6th",        f:[[1,0],[3,4],[5,7],[6,9]]},
+    {sym:"m6",      full:"minor 6th",        f:[[1,0],[3,3],[5,7],[6,9]]},
+    {sym:"7",       full:"dominant 7th",     f:[[1,0],[3,4],[5,7],[7,10]]},
+    {sym:"maj7",    full:"major 7th",        f:[[1,0],[3,4],[5,7],[7,11]]},
+    {sym:"m7",      full:"minor 7th",        f:[[1,0],[3,3],[5,7],[7,10]]},
+    {sym:"m(maj7)", full:"minor–major 7th",  f:[[1,0],[3,3],[5,7],[7,11]]},
+    {sym:"°7",      full:"diminished 7th",   f:[[1,0],[3,3],[5,6],[7,9]]},
+    {sym:"ø7",      full:"half-diminished",  f:[[1,0],[3,3],[5,6],[7,10]]},
+    {sym:"9",       full:"dominant 9th",     f:[[1,0],[3,4],[5,7],[7,10],[9,14]]},
+    {sym:"maj9",    full:"major 9th",        f:[[1,0],[3,4],[5,7],[7,11],[9,14]]},
+    {sym:"m9",      full:"minor 9th",        f:[[1,0],[3,3],[5,7],[7,10],[9,14]]},
+    {sym:"add9",    full:"added 9th",        f:[[1,0],[3,4],[5,7],[9,14]]},
+  ];
+
+  const IV_NAME = {
+    "1,0":"Root","2,2":"Major 2nd","3,3":"Minor 3rd","3,4":"Major 3rd",
+    "4,5":"Perfect 4th","5,6":"Dim 5th","5,7":"Perfect 5th","5,8":"Aug 5th",
+    "6,9":"Major 6th","7,9":"Dim 7th","7,10":"Minor 7th","7,11":"Major 7th",
+    "9,14":"Major 9th"
+  };
+
+  function parseRoot(r){
+    const letter = r[0];
+    const acc = r.length>1 ? (r[1]==="♯" ? 1 : -1) : 0;
+    const li = LETTERS.indexOf(letter);
+    return {li, pc:(NAT_PC[li]+acc+12)%12};
+  }
+  /* spell one chord tone with the correct letter and accidental */
+  function spell(root, deg, semis){
+    const li = (root.li + deg - 1) % 7;
+    const natural = NAT_PC[li];
+    let acc = (root.pc + semis - natural) % 12;
+    if (acc > 6) acc -= 12;
+    if (acc < -6) acc += 12;
+    return LETTERS[li] + (ACC_STR[String(acc)] ?? "?");
+  }
+
+  /* ---------------- state ---------------- */
+  let rootName = "C", quality = QUALITIES[0];
+
+  const rootsEl = document.getElementById("roots");
+  const qualsEl = document.getElementById("quals");
+  const kbd = document.getElementById("kbd");
+  const NS = "http://www.w3.org/2000/svg";
+
+  ROOTS.forEach(r=>{
+    const b = document.createElement("button");
+    b.className = "chipbtn"; b.type = "button"; b.textContent = r;
+    b.addEventListener("click", ()=>{ rootName = r; render(); });
+    rootsEl.appendChild(b);
+  });
+  QUALITIES.forEach(q=>{
+    const b = document.createElement("button");
+    b.className = "chipbtn"; b.type = "button";
+    b.textContent = q.sym === "" ? "maj" : q.sym;
+    b.title = q.full;
+    b.addEventListener("click", ()=>{ quality = q; render(); });
+    qualsEl.appendChild(b);
+  });
+
+  /* ---------------- keyboard drawing ---------------- */
+  const OCTAVES = 3, WW = 30, WH = 148, BW = 18, BH = 92;
+  const IS_BLACK = [false,true,false,true,false,false,true,false,true,false,true,false];
+  const keyRects = [];  // index = semitones above the leftmost C
+
+  function buildKeyboard(){
+    const whites = [], blacks = [];
+    let wx = 0;
+    for (let o=0;o<OCTAVES;o++){
+      for (let pc=0;pc<12;pc++){
+        const idx = o*12+pc;
+        if (!IS_BLACK[pc]){
+          whites.push({idx, x:wx}); wx += WW;
+        } else {
+          blacks.push({idx, x:wx - BW/2});
+        }
+      }
+    }
+    whites.forEach(k=>{
+      const r = document.createElementNS(NS,"rect");
+      r.setAttribute("x",k.x); r.setAttribute("y",1);
+      r.setAttribute("width",WW); r.setAttribute("height",WH);
+      r.setAttribute("rx",3); r.setAttribute("class","wk");
+      kbd.appendChild(r); keyRects[k.idx] = r;
+    });
+    blacks.forEach(k=>{
+      const r = document.createElementNS(NS,"rect");
+      r.setAttribute("x",k.x); r.setAttribute("y",1);
+      r.setAttribute("width",BW); r.setAttribute("height",BH);
+      r.setAttribute("rx",2.5); r.setAttribute("class","bk");
+      kbd.appendChild(r); keyRects[k.idx] = r;
+    });
+  }
+  buildKeyboard();
+
+  /* ---------------- audio ---------------- */
+  let ctx = null;
+  function audio(){
+    if(!ctx) ctx = new (window.AudioContext||window.webkitAudioContext)();
+    if(ctx.state==="suspended") ctx.resume();
+    return ctx;
+  }
+  function tone(semisFromC4, t0, dur, vol){
+    const c = audio();
+    const f = 261.63 * Math.pow(2, semisFromC4/12);
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = "triangle"; o.frequency.value = f;
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(vol, t0+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+    o.connect(g).connect(c.destination);
+    o.start(t0); o.stop(t0+dur+0.05);
+  }
+  function chordSemis(){
+    const root = parseRoot(rootName);
+    return quality.f.map(([,s]) => root.pc + s);
+  }
+  document.getElementById("playBlock").addEventListener("click", ()=>{
+    const t0 = audio().currentTime + 0.03;
+    chordSemis().forEach((s,i)=>{
+      tone(s, t0, 1.4, 0.15);
+      if (i===0) tone(s-12, t0, 1.4, 0.10);
+    });
+  });
+  document.getElementById("playArp").addEventListener("click", ()=>{
+    const t0 = audio().currentTime + 0.03;
+    const semis = chordSemis();
+    semis.concat([semis[0]+12]).forEach((s,i)=> tone(s, t0 + i*0.26, 0.5, 0.18));
+  });
+
+  /* ---------------- render ---------------- */
+  function render(){
+    const root = parseRoot(rootName);
+
+    rootsEl.querySelectorAll(".chipbtn").forEach(b=>b.classList.toggle("on", b.textContent===rootName));
+    qualsEl.querySelectorAll(".chipbtn").forEach(b=>{
+      const sym = b.textContent==="maj" ? "" : b.textContent;
+      b.classList.toggle("on", sym===quality.sym);
+    });
+
+    document.getElementById("chordName").textContent = rootName + quality.sym;
+    document.getElementById("chordFull").textContent = rootName + " " + quality.full;
+
+    const row = document.getElementById("noteRow");
+    row.innerHTML = "";
+    quality.f.forEach(([deg,semis])=>{
+      const div = document.createElement("div");
+      div.className = "note-chip" + (semis===0 ? " root" : "");
+      div.innerHTML = '<div class="n serif">'+spell(root,deg,semis)+'</div>'+
+                      '<div class="iv">'+(IV_NAME[deg+","+semis]||"")+'</div>';
+      row.appendChild(div);
+    });
+
+    keyRects.forEach(r=>{ r.classList.remove("hl","rt"); });
+    quality.f.forEach(([,semis])=>{
+      const idx = root.pc + semis;
+      if (keyRects[idx]) keyRects[idx].classList.add(semis===0 ? "rt" : "hl");
+    });
+  }
+  render();
+})();
+</script>
+</body>
+</html>

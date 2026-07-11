@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interval Ear Trainer · Music toolkit</title>
+<link rel="stylesheet" href="css/theme.css">
+<style>
+  .layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,.9fr);gap:clamp(20px,3.5vw,40px);align-items:start}
+  @media (max-width:860px){.layout{grid-template-columns:1fr}}
+  .col{display:flex;flex-direction:column;gap:16px;min-width:0}
+
+  .quiz{text-align:center;padding:26px 20px}
+  .status{
+    font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    font-size:26px;font-weight:600;min-height:38px;
+  }
+  .status.good{color:var(--brass)}
+  .status.bad{color:var(--muted)}
+  .quiz .play-row{display:flex;gap:10px;justify-content:center;margin:18px 0 22px;flex-wrap:wrap}
+  .answers{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+  .answers .chipbtn{padding:11px 6px;font-size:15px}
+  .answers .chipbtn:disabled{opacity:.45;cursor:default}
+  .answers .chipbtn.correct{border-color:var(--brass);background:var(--brass-soft);color:var(--brass)}
+  .answers .chipbtn.wrong{border-color:var(--muted);color:var(--muted);text-decoration:line-through}
+
+  .scorebar{display:flex;gap:22px;justify-content:center;flex-wrap:wrap}
+  .stat{text-align:center}
+  .stat .v{font-family:"Iowan Old Style",Palatino,Georgia,serif;font-size:30px;font-weight:600;
+    font-variant-numeric:tabular-nums}
+  .stat .l{font-size:11.5px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase}
+
+  .modes,.pool{display:flex;gap:8px;flex-wrap:wrap}
+  .pool .chipbtn{font-size:14px}
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <a class="home serif" href="index.html">♩ Music toolkit</a>
+  <span class="sep">/</span>
+  <span class="here">Interval Ear Trainer</span>
+</nav>
+<div class="wrap">
+  <header class="page">
+    <h1>Interval Ear Trainer</h1>
+    <p>Two notes play — name the distance between them. Start with a small set of
+       intervals and switch on more as your ear sharpens.</p>
+  </header>
+
+  <div class="layout">
+    <div class="col">
+      <div class="card quiz">
+        <div class="status" id="status">Press play to begin</div>
+        <div class="play-row">
+          <button class="btn brass" id="playBtn" type="button">▶ Play interval</button>
+          <button class="btn" id="nextBtn" type="button" hidden>Next question →</button>
+        </div>
+        <div class="answers" id="answers"></div>
+      </div>
+      <div class="card">
+        <div class="scorebar">
+          <div class="stat"><div class="v" id="sCorrect">0</div><div class="l">correct</div></div>
+          <div class="stat"><div class="v" id="sTotal">0</div><div class="l">asked</div></div>
+          <div class="stat"><div class="v" id="sPct">–</div><div class="l">accuracy</div></div>
+          <div class="stat"><div class="v" id="sStreak">0</div><div class="l">streak</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card">
+        <h2 class="sect">Direction</h2>
+        <div class="modes" id="modes"></div>
+        <p class="hint" style="margin-top:12px"><b>Harmonic</b> plays both notes at once —
+           the hardest of the three.</p>
+      </div>
+      <div class="card">
+        <h2 class="sect">Intervals to practice</h2>
+        <div class="pool" id="pool"></div>
+        <p class="hint" style="margin-top:12px">Tap to include or exclude an interval.
+           At least two must stay on.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const INTERVALS = [
+    {s:1,  ab:"m2", name:"Minor 2nd"},
+    {s:2,  ab:"M2", name:"Major 2nd"},
+    {s:3,  ab:"m3", name:"Minor 3rd"},
+    {s:4,  ab:"M3", name:"Major 3rd"},
+    {s:5,  ab:"P4", name:"Perfect 4th"},
+    {s:6,  ab:"TT", name:"Tritone"},
+    {s:7,  ab:"P5", name:"Perfect 5th"},
+    {s:8,  ab:"m6", name:"Minor 6th"},
+    {s:9,  ab:"M6", name:"Major 6th"},
+    {s:10, ab:"m7", name:"Minor 7th"},
+    {s:11, ab:"M7", name:"Major 7th"},
+    {s:12, ab:"P8", name:"Octave"},
+  ];
+  const MODES = [["asc","Ascending"],["desc","Descending"],["harm","Harmonic"],["mix","Mixed"]];
+
+  /* start with an approachable pool */
+  const enabled = new Set([2,4,5,7,9,12]);
+  let mode = "asc";
+  let current = null;       // {s, base, dir}
+  let answered = false;
+  let correct = 0, total = 0, streak = 0;
+
+  /* ---- audio ---- */
+  let ctx = null;
+  function audio(){
+    if(!ctx) ctx = new (window.AudioContext||window.webkitAudioContext)();
+    if(ctx.state==="suspended") ctx.resume();
+    return ctx;
+  }
+  function tone(semisFromC4, t0, dur, vol){
+    const c = audio();
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = "triangle";
+    o.frequency.value = 261.63 * Math.pow(2, semisFromC4/12);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(vol, t0+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+    o.connect(g).connect(c.destination);
+    o.start(t0); o.stop(t0+dur+0.05);
+  }
+  function playCurrent(){
+    if (!current) return;
+    const t0 = audio().currentTime + 0.05;
+    const a = current.base;
+    const b = current.dir==="desc" ? current.base - current.s : current.base + current.s;
+    if (current.dir==="harm"){
+      tone(a,t0,1.5,.16); tone(b,t0,1.5,.16);
+    } else {
+      tone(a,t0,.75,.2); tone(b,t0+.85,.9,.2);
+    }
+  }
+
+  /* ---- question flow ---- */
+  const statusEl = document.getElementById("status");
+  const playBtn = document.getElementById("playBtn");
+  const nextBtn = document.getElementById("nextBtn");
+  const answersEl = document.getElementById("answers");
+
+  function newQuestion(){
+    const pool = INTERVALS.filter(iv=>enabled.has(iv.s));
+    const iv = pool[Math.floor(Math.random()*pool.length)];
+    const dir = mode==="mix" ? ["asc","desc","harm"][Math.floor(Math.random()*3)] : mode;
+    /* keep both notes within ±14 semitones of middle C */
+    const lo = dir==="desc" ? -14 + iv.s : -14;
+    const hi = dir==="desc" ? 14 : 14 - iv.s;
+    const base = lo + Math.floor(Math.random()*(hi-lo+1));
+    current = {s:iv.s, base, dir};
+    answered = false;
+    statusEl.textContent = "What do you hear?";
+    statusEl.className = "status";
+    nextBtn.hidden = true;
+    playBtn.textContent = "▶ Replay";
+    drawAnswers();
+    playCurrent();
+  }
+
+  function drawAnswers(){
+    answersEl.innerHTML = "";
+    INTERVALS.filter(iv=>enabled.has(iv.s)).forEach(iv=>{
+      const b = document.createElement("button");
+      b.className = "chipbtn"; b.type = "button";
+      b.textContent = iv.name;
+      b.addEventListener("click", ()=>answer(iv, b));
+      answersEl.appendChild(b);
+    });
+  }
+
+  function answer(iv, btn){
+    if (answered || !current) return;
+    answered = true;
+    total++;
+    const right = iv.s === current.s;
+    if (right){ correct++; streak++; } else { streak = 0; }
+    const correctName = INTERVALS.find(x=>x.s===current.s).name;
+    answersEl.querySelectorAll("button").forEach(b=>{
+      b.disabled = true;
+      if (b.textContent === correctName) b.classList.add("correct");
+    });
+    if (!right) btn.classList.add("wrong");
+    statusEl.textContent = right ? "Correct — " + correctName
+                                 : "It was " + correctName;
+    statusEl.className = "status " + (right ? "good" : "bad");
+    nextBtn.hidden = false;
+    updateScore();
+    if (right) setTimeout(()=>{ if (answered) newQuestion(); }, 1300);
+  }
+
+  function updateScore(){
+    document.getElementById("sCorrect").textContent = correct;
+    document.getElementById("sTotal").textContent = total;
+    document.getElementById("sPct").textContent =
+      total ? Math.round(100*correct/total)+"%" : "–";
+    document.getElementById("sStreak").textContent = streak;
+  }
+
+  playBtn.addEventListener("click", ()=> current && !answered ? playCurrent() : newQuestion());
+  nextBtn.addEventListener("click", newQuestion);
+
+  /* ---- settings ---- */
+  const modesEl = document.getElementById("modes");
+  MODES.forEach(([v,label])=>{
+    const b = document.createElement("button");
+    b.className = "chipbtn" + (v===mode ? " on" : "");
+    b.type = "button"; b.textContent = label; b.dataset.v = v;
+    b.addEventListener("click", ()=>{
+      mode = v;
+      modesEl.querySelectorAll(".chipbtn").forEach(x=>x.classList.toggle("on", x.dataset.v===v));
+    });
+    modesEl.appendChild(b);
+  });
+
+  const poolEl = document.getElementById("pool");
+  INTERVALS.forEach(iv=>{
+    const b = document.createElement("button");
+    b.className = "chipbtn" + (enabled.has(iv.s) ? " on" : "");
+    b.type = "button"; b.textContent = iv.ab; b.title = iv.name;
+    b.addEventListener("click", ()=>{
+      if (enabled.has(iv.s)){
+        if (enabled.size <= 2) return;          // keep at least two
+        enabled.delete(iv.s);
+      } else enabled.add(iv.s);
+      b.classList.toggle("on", enabled.has(iv.s));
+      if (!answered && current){
+        // refresh choices mid-question; re-deal if the asked interval was removed
+        if (!enabled.has(current.s)) newQuestion();
+        else drawAnswers();
+      }
+    });
+    poolEl.appendChild(b);
+  });
+})();
+</script>
+</body>
+</html>

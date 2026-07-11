@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reference Pitch · Music toolkit</title>
+<link rel="stylesheet" href="css/theme.css">
+<style>
+  .layout{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:clamp(20px,3.5vw,40px);align-items:start}
+  @media (max-width:840px){.layout{grid-template-columns:1fr}}
+  .col{display:flex;flex-direction:column;gap:16px;min-width:0}
+
+  .now{text-align:center;padding:28px 20px}
+  .now .note{
+    font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    font-size:clamp(56px,9vw,84px);font-weight:600;line-height:1;
+  }
+  .now .freq{color:var(--muted);font-size:17px;margin-top:8px;font-variant-numeric:tabular-nums}
+  .now .btn{margin-top:20px;padding:13px 34px;font-size:16px}
+
+  .notes{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+  .octaves,.presets,.strings{display:flex;gap:8px;flex-wrap:wrap}
+  .cal-row{display:flex;align-items:center;gap:14px;margin-top:6px}
+  .cal-row input[type=range]{flex:1;accent-color:var(--brass)}
+  .cal-val{font-variant-numeric:tabular-nums;min-width:5.5ch;text-align:right;
+    font-family:"Iowan Old Style",Palatino,Georgia,serif;font-size:18px}
+  .strings .chipbtn{font-size:14px}
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <a class="home serif" href="index.html">♩ Music toolkit</a>
+  <span class="sep">/</span>
+  <span class="here">Reference Pitch</span>
+</nav>
+<div class="wrap">
+  <header class="page">
+    <h1>Reference Pitch</h1>
+    <p>A pitch pipe that never runs out of breath. Pick any note, sustain it as a drone,
+       and tune by ear — with adjustable concert pitch for period or orchestra tuning.</p>
+  </header>
+
+  <div class="layout">
+    <div class="col">
+      <div class="card now">
+        <div class="note serif" id="noteView">A4</div>
+        <div class="freq" id="freqView">440.00 Hz</div>
+        <button class="btn brass" id="toggle" type="button">▶ Sound</button>
+      </div>
+      <div class="card">
+        <h2 class="sect">Quick tunings</h2>
+        <p class="hint" style="margin-bottom:10px"><b>Guitar</b> (low to high)</p>
+        <div class="strings" id="guitar"></div>
+        <p class="hint" style="margin:14px 0 10px"><b>Violin</b></p>
+        <div class="strings" id="violin"></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card">
+        <h2 class="sect">Note</h2>
+        <div class="notes" id="notes"></div>
+      </div>
+      <div class="card">
+        <h2 class="sect">Octave</h2>
+        <div class="octaves" id="octaves"></div>
+      </div>
+      <div class="card">
+        <h2 class="sect">Concert pitch (A4)</h2>
+        <div class="cal-row">
+          <input type="range" id="cal" min="415" max="445" step="1" value="440"
+                 aria-label="Concert pitch of A4 in hertz">
+          <span class="cal-val" id="calVal">440 Hz</span>
+        </div>
+        <div class="presets" id="presets" style="margin-top:12px"></div>
+        <p class="hint" style="margin-top:12px"><b>415</b> baroque · <b>432</b> alternative ·
+           <b>440</b> standard · <b>442–443</b> many orchestras.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const NOTES = ["C","C♯","D","E♭","E","F","F♯","G","A♭","A","B♭","B"];
+  let noteIdx = 9, octave = 4, a4 = 440;   // A4
+  let playing = false;
+
+  /* ---- audio: one persistent oscillator while playing ---- */
+  let ctx = null, osc = null, gain = null;
+  function audio(){
+    if(!ctx) ctx = new (window.AudioContext||window.webkitAudioContext)();
+    if(ctx.state==="suspended") ctx.resume();
+    return ctx;
+  }
+  function freq(){
+    /* semitones relative to A4: (octave-4)*12 + (noteIdx - 9) */
+    const n = (octave-4)*12 + (noteIdx-9);
+    return a4 * Math.pow(2, n/12);
+  }
+  function start(){
+    const c = audio();
+    osc = c.createOscillator(); gain = c.createGain();
+    osc.type = "triangle";
+    osc.frequency.value = freq();
+    gain.gain.setValueAtTime(0, c.currentTime);
+    gain.gain.linearRampToValueAtTime(0.22, c.currentTime+0.06);
+    osc.connect(gain).connect(c.destination);
+    osc.start();
+    playing = true;
+  }
+  function stop(){
+    if (osc){
+      const c = ctx, o = osc, g = gain;
+      g.gain.setTargetAtTime(0, c.currentTime, 0.04);
+      o.stop(c.currentTime + 0.3);
+      osc = null; gain = null;
+    }
+    playing = false;
+  }
+  function retune(){
+    if (osc) osc.frequency.setTargetAtTime(freq(), ctx.currentTime, 0.02);
+  }
+
+  /* ---- render ---- */
+  const noteView = document.getElementById("noteView");
+  const freqView = document.getElementById("freqView");
+  const toggle = document.getElementById("toggle");
+  const notesEl = document.getElementById("notes");
+  const octEl = document.getElementById("octaves");
+  const cal = document.getElementById("cal");
+  const calVal = document.getElementById("calVal");
+
+  function paint(){
+    noteView.textContent = NOTES[noteIdx] + octave;
+    freqView.textContent = freq().toFixed(2) + " Hz";
+    calVal.textContent = a4 + " Hz";
+    notesEl.querySelectorAll(".chipbtn").forEach((b,i)=>b.classList.toggle("on", i===noteIdx));
+    octEl.querySelectorAll(".chipbtn").forEach(b=>b.classList.toggle("on", +b.textContent===octave));
+    toggle.textContent = playing ? "■ Stop" : "▶ Sound";
+    toggle.classList.toggle("on", playing);
+    retune();
+  }
+
+  NOTES.forEach((n,i)=>{
+    const b = document.createElement("button");
+    b.className = "chipbtn"; b.type = "button"; b.textContent = n;
+    b.addEventListener("click", ()=>{ noteIdx = i; paint(); });
+    notesEl.appendChild(b);
+  });
+  [2,3,4,5,6].forEach(o=>{
+    const b = document.createElement("button");
+    b.className = "chipbtn"; b.type = "button"; b.textContent = o;
+    b.addEventListener("click", ()=>{ octave = o; paint(); });
+    octEl.appendChild(b);
+  });
+  cal.addEventListener("input", ()=>{ a4 = +cal.value; paint(); });
+
+  [415,432,440,442].forEach(v=>{
+    const b = document.createElement("button");
+    b.className = "chipbtn"; b.type = "button"; b.textContent = v;
+    b.addEventListener("click", ()=>{ a4 = v; cal.value = v; paint(); });
+    document.getElementById("presets").appendChild(b);
+  });
+
+  /* quick tunings: [label, noteIdx, octave] */
+  const GUITAR = [["E2",4,2],["A2",9,2],["D3",2,3],["G3",7,3],["B3",11,3],["E4",4,4]];
+  const VIOLIN = [["G3",7,3],["D4",2,4],["A4",9,4],["E5",4,5]];
+  function quick(elId, arr){
+    const host = document.getElementById(elId);
+    arr.forEach(([label,ni,oc])=>{
+      const b = document.createElement("button");
+      b.className = "chipbtn"; b.type = "button"; b.textContent = label;
+      b.addEventListener("click", ()=>{
+        noteIdx = ni; octave = oc;
+        if (!playing) start();
+        paint();
+      });
+      host.appendChild(b);
+    });
+  }
+  quick("guitar", GUITAR);
+  quick("violin", VIOLIN);
+
+  toggle.addEventListener("click", ()=>{ playing ? stop() : start(); paint(); });
+  document.addEventListener("keydown", e=>{
+    if (e.key===" " && !e.target.closest("button,input")){
+      e.preventDefault();
+      playing ? stop() : start(); paint();
+    }
+  });
+
+  paint();
+})();
+</script>
+</body>
+</html>
